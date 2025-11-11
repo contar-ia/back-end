@@ -1,7 +1,7 @@
 # to build: 
 
 ```bash
-docker build -t my-fastapi-app .
+docker build -t conversai-server .
 ```
 
 # to run:
@@ -9,5 +9,5 @@ docker build -t my-fastapi-app .
 ```bash
 sudo docker run -p 8000:8000 \
     -v "$(pwd)":/app \
-    my-fastapi-app
+    conversai-server
 ```
