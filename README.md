@@ -1,13 +1,13 @@
 # to build: 
 
 ```bash
-docker build -t conversai-server .
+docker build -t contaria-server .
 ```
 
 # to run:
 
 ```bash
-sudo docker run -p 8000:8000 \
+docker run -p 8000:8000 \
     -v "$(pwd)":/app \
-    conversai-server
+    contaria-server
 ```
