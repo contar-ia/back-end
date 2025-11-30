@@ -1,0 +1,43 @@
+version: '3.8'
+
+services:
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    
+    # Start server in background, wait a moment, pull the model, then keep waiting
+    entrypoint: /bin/sh
+    command:
+      - "-c"
+      - "ollama serve & sleep 5 && ollama pull llama3.2:latest && wait"
+
+    healthcheck:
+      # Use 'ollama list' to check if the server is responsive.
+      test: ["CMD-SHELL", "ollama list || exit 1"]
+      interval: 600s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  fastapi-app:
+    build: .
+    container_name: fastapi-app
+    ports:
+      - "8000:8000"
+    environment:
+      OLLAMA_API_URL: "http://ollama:11434/api/generate"
+      OLLAMA_MODEL: "llama3.2:latest"
+    depends_on:
+      ollama:
+        condition: service_healthy
+    volumes:
+      - .:/app
+
+volumes:
+  ollama_data:
+    driver: local
