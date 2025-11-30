@@ -9,3 +9,8 @@ docker compose up --build
 ```bash
 docker compose up
 ```
+
+# Containers:
+
+- ollama
+- fastapi-app
