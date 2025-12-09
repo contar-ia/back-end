@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   ollama:
     image: ollama/ollama:latest
@@ -38,6 +36,14 @@ services:
     volumes:
       - .:/app
 
+  contaria_db:
+    build:
+      context: ./database
+      dockerfile: Dockerfile
+    volumes:
+      - contaria_db_data:/var/lib/postgresql/data
+
 volumes:
   ollama_data:
     driver: local
+  contaria_db_data:
