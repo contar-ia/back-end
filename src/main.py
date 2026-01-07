@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 app = FastAPI()
 
 app.include_router(routers.llm_router, prefix="/llm") # from docs: "A path prefix must not end with '/', as the routes will start with '/'"
+app.include_router(routers.auth_router, prefix="/auth")
 
 app.add_middleware(
     CORSMiddleware,
