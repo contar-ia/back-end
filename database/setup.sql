@@ -2,7 +2,7 @@ CREATE TABLE IF NOT EXISTS users (
     id         UUID DEFAULT gen_random_uuid() PRIMARY KEY,
     username   TEXT NOT NULL,
     email      TEXT NOT NULL,
-    pw_hash    CHARACTER[256] NOT NULL
+    pw_hash    TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS stories (
