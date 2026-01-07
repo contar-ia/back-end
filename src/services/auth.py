@@ -21,8 +21,28 @@ async def register_user(username: str, email: str, password: str):
     query = "INSERT INTO users (username, email, pw_hash) VALUES ($1, $2, $3)"
     await db_manager.execute(query, username, email, encrypted_password)
 
-async def login_user():
-    pass
+async def login_user(username: str, password: str):
+    query = "SELECT id, pw_hash FROM users WHERE username = $1"
+    user_record = await db_manager.fetchrow(query, username)
+
+    if not user_record:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid username or password"
+        )
+    
+    is_valid = await _verify_password(password, user_record["pw_hash"])
+    if not is_valid:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid username or password"
+        )
+
+    return {
+        "user_id": user_record["id"],
+        "status": "authenticated",
+        "token": "mocked_token"
+    }
 
 async def _encrypt_password(password: str) -> str:
     pwd_bytes = password.encode('utf-8')

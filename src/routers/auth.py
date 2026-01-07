@@ -1,22 +1,17 @@
 import services
 from models import LoginRequest, RegisterRequest
-from fastapi import APIRouter
+from fastapi import APIRouter, status
 
 auth_router = APIRouter()
 
 @auth_router.post("/login/")
 async def execute_login(request: LoginRequest):
-    await services.auth.login_user()
-    return {
-        "not": "yet implemented" 
-    }
+    return await services.auth.login_user(request.username, request.password)
 
-@auth_router.post("/register/")
+@auth_router.post("/register/", status_code=status.HTTP_201_CREATED)
 async def execute_user_registration(request: RegisterRequest):
     await services.auth.register_user(request.username, request.email, request.password)
-    return {
-        "not": "yet implemented"
-    }
+    return { "message": "User created" }
 
 @auth_router.get("/")
 async def list_db_users():
