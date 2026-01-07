@@ -1,5 +1,4 @@
 import httpx
-import services
 import routers
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
