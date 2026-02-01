@@ -22,27 +22,29 @@ async def register_user(username: str, email: str, password: str):
     query = "INSERT INTO users (username, email, pw_hash) VALUES ($1, $2, $3)"
     await db_manager.execute(query, username, email, encrypted_password)
 
-async def login_user(username: str, password: str):
-    query = "SELECT id, pw_hash FROM users WHERE username = $1"
-    user_record = await db_manager.fetchrow(query, username)
+async def login_user(email: str, password: str):
+    query = "SELECT * FROM users WHERE email = $1"
+    user_record = await db_manager.fetchrow(query, email)
 
     if not user_record:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid username or password"
+            detail="Invalid email or password"
         )
-    
+
     is_valid = await _verify_password(password, user_record["pw_hash"])
     if not is_valid:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid username or password"
+            detail="Invalid email or password"
         )
 
     return {
         "user_id": user_record["id"],
         "status": "authenticated",
-        "token": create_session(user_record["id"])
+        "username": user_record['username'],
+        "email": user_record['email'],
+        "token": await create_session(user_record["id"]),
     }
 
 async def _encrypt_password(password: str) -> str:
@@ -70,5 +72,4 @@ async def create_session(user_id: str):
         RETURNING session_token
     """
     row = await db_manager.fetchrow(query, user_id, expiration)
-    
     return row['session_token']

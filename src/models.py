@@ -10,7 +10,7 @@ class RegisterRequest(BaseModel):
     password: str
 
 class LoginRequest(BaseModel):
-    username: str
+    email: str
     password: str
 
 class StoryGenerationRequest(BaseModel):

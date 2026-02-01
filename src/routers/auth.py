@@ -6,7 +6,7 @@ auth_router = APIRouter()
 
 @auth_router.post("/login/")
 async def execute_login(request: LoginRequest):
-    return await services.auth.login_user(request.username, request.password)
+    return await services.auth.login_user(request.email, request.password)
 
 @auth_router.post("/register/", status_code=status.HTTP_201_CREATED)
 async def execute_user_registration(request: RegisterRequest):
