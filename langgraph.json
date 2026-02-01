@@ -1,0 +1,21 @@
+{
+  "graphs": {
+    "story_pipeline": "./src/langgraph_entry.py:graph"
+  },
+  "dependencies": [
+    "./requirements.txt"
+  ],
+  "env": ".env",
+  "cors": {
+    "allow_origins": [
+      "https://smith.langchain.com",
+      "https://studio.langchain.com",
+      "http://192.168.90.108:2024",
+      "http://127.0.0.1:2024",
+      "http://localhost:2024"
+    ],
+    "allow_methods": ["GET", "POST", "OPTIONS", "PATCH", "DELETE"],
+    "allow_headers": ["Content-Type", "Authorization", "Origin"],
+    "allow_private_network": true
+  }
+}

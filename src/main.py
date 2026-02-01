@@ -1,3 +1,4 @@
+import logging
 import httpx
 import routers
 from contextlib import asynccontextmanager
@@ -10,12 +11,22 @@ async def lifespan(app: FastAPI):
     await db_manager.connect() # Runs when the server starts
     yield
     await db_manager.disconnect() # Runs when the server stops
+    
+# Configurar logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
+
+app = FastAPI()
 
 app = FastAPI(lifespan=lifespan)
 
 # Register the routes to the fastapi server
 app.include_router(routers.llm_router, prefix="/llm") # from docs: "A path prefix must not end with '/', as the routes will start with '/'"
 app.include_router(routers.auth_router, prefix="/auth")
+app.include_router(routers.stories_router, prefix="/stories")
 
 app.add_middleware(
     CORSMiddleware,
