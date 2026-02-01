@@ -1,6 +1,7 @@
 from database import db_manager
 from fastapi import HTTPException, status
 import bcrypt
+from datetime import datetime, timedelta, timezone
 
 async def register_user(username: str, email: str, password: str):
     already_registered_username = await db_manager.fetchrow("SELECT * FROM users WHERE username=$1", username)
@@ -41,7 +42,7 @@ async def login_user(username: str, password: str):
     return {
         "user_id": user_record["id"],
         "status": "authenticated",
-        "token": "mocked_token"
+        "token": create_session(user_record["id"])
     }
 
 async def _encrypt_password(password: str) -> str:
@@ -59,3 +60,15 @@ async def _verify_password(plain_password: str, hashed_password: str) -> bool:
 async def _list_db_users():
     found_users = await db_manager.fetch("SELECT * FROM users")
     return found_users
+
+async def create_session(user_id: str):
+    expiration = datetime.now(timezone.utc) + timedelta(days=7)
+    
+    query = """
+        INSERT INTO sessions (user_id, expires_at) 
+        VALUES ($1, $2) 
+        RETURNING session_token
+    """
+    row = await db_manager.fetchrow(query, user_id, expiration)
+    
+    return row['session_token']
