@@ -1,5 +1,5 @@
-from pydantic import BaseModel
-from typing import List, Optional
+from pydantic import BaseModel, Field
+from typing import List, Optional, Union
 
 class PromptRequest(BaseModel):
     prompt: str
@@ -19,8 +19,10 @@ class StoryGenerationRequest(BaseModel):
     educational_value: str
     setting: str
     characters: List[str]
+    title: Optional[str] = None
+    creator_id: Optional[Union[str, int]] = None
 
 class StoryGenerationResponse(BaseModel):
     story_markdown: Optional[str] = None
-    issues: List[str] = []
+    issues: List[str] = Field(default_factory=list)
     

@@ -42,6 +42,8 @@ services:
       dockerfile: Dockerfile
     volumes:
       - contaria_db_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
 
 volumes:
   ollama_data:

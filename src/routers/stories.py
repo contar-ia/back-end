@@ -2,6 +2,7 @@
 import logging
 from fastapi import APIRouter, HTTPException
 from models import StoryGenerationRequest, StoryGenerationResponse
+from database import db_manager
 from story_graph import story_graph
 from story_state import StoryState
 
@@ -72,7 +73,19 @@ async def generate_story(request: StoryGenerationRequest):
                 issues.append("Não foi possível gerar a história. Verifique os logs do servidor.")
             logger.error(f"História não gerada ou vazia. Issues: {issues}, draft_story existe: {bool(draft_story)}")
             story_markdown = None
-        
+
+        # Salvar história no banco de dado
+        if story_markdown and getattr(request, "creator_id", None):
+            try:
+                title_to_save = request.title or request.theme
+                insert_query = "INSERT INTO stories (creator_id, title, contents) VALUES ($1, $2, $3) RETURNING id"
+                row = await db_manager.fetchrow(insert_query, request.creator_id, title_to_save, story_markdown)
+                saved_id = row["id"] if row and "id" in row else None
+                logger.info(f"História salva no DB, id={saved_id}")
+            except Exception as e:
+                logger.exception(f"Falha ao salvar história no banco: {e}")
+                issues.append(f"Falha ao salvar história no banco: {str(e)}")
+
         return StoryGenerationResponse(
             story_markdown=story_markdown,
             issues=issues
