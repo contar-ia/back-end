@@ -8,9 +8,12 @@ from fastapi.middleware.cors import CORSMiddleware
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Tentar conectar ao banco, mas não falhar se não conseguir
     await db_manager.connect() # Runs when the server starts
     yield
-    await db_manager.disconnect() # Runs when the server stops
+    # Desconectar apenas se estiver conectado
+    if db_manager.connected:
+        await db_manager.disconnect() # Runs when the server stops
     
 # Configurar logging
 logging.basicConfig(

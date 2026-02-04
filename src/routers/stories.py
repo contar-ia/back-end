@@ -1,10 +1,11 @@
 """Router para endpoints de geração de histórias."""
 import logging
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, status
 from models import StoryGenerationRequest, StoryGenerationResponse
 from database import db_manager
 from story_graph import story_graph
 from story_state import StoryState
+from input_validator import validate_input_safety
 
 logger = logging.getLogger(__name__)
 stories_router = APIRouter()
@@ -18,6 +19,34 @@ async def generate_story(request: StoryGenerationRequest):
     Recebe StoryGenerationRequest e retorna StoryGenerationResponse.
     """
     try:
+        # VALIDAÇÃO PRÉVIA: Verificar se o input contém conteúdo sensível/impróprio usando LLM
+        logger.info("=" * 60)
+        logger.info("🔍 [VALIDAÇÃO INPUT] Verificando conteúdo do input com LLM...")
+        
+        is_safe, input_issues = await validate_input_safety(
+            theme=request.theme,
+            age_group=request.age_group,
+            educational_value=request.educational_value,
+            setting=request.setting,
+            characters=request.characters
+        )
+        
+        if not is_safe:
+            logger.warning("=" * 60)
+            logger.warning("❌ [VALIDAÇÃO INPUT] Input rejeitado - conteúdo sensível detectado")
+            logger.warning("=" * 60)
+            
+            # Retornar erro HTTP 400 com mensagem genérica (sem especificar o problema)
+            error_message = "As informações fornecidas contêm conteúdo sensível ou impróprio para histórias infantis. Por favor, revise o tema, personagens, cenário e valores educativos."
+            
+            return StoryGenerationResponse(
+                story_markdown=None,
+                issues=[error_message]
+            )
+        
+        logger.info("✅ [VALIDAÇÃO INPUT] Input aprovado - prosseguindo com geração")
+        logger.info("=" * 60)
+        
         # Inicializar estado do grafo
         initial_state: StoryState = {
             "input": request,
@@ -25,7 +54,10 @@ async def generate_story(request: StoryGenerationRequest):
             "safety_ok": False,
             "requirements_ok": False,
             "final_story": None,
-            "issues": []
+            "issues": [],
+            "retry_count": 0,
+            "max_retries": 1,  # Máximo de 1 tentativa de regeneração (para não demorar muito)
+            "feedback": None
         }
         
         logger.info("=" * 60)
@@ -73,6 +105,29 @@ async def generate_story(request: StoryGenerationRequest):
                 issues.append("Não foi possível gerar a história. Verifique os logs do servidor.")
             logger.error(f"História não gerada ou vazia. Issues: {issues}, draft_story existe: {bool(draft_story)}")
             story_markdown = None
+        
+        # Limpar issues irrelevantes se a história foi gerada com sucesso
+        if story_markdown and len(story_markdown.strip()) > 0:
+            # Remover issues que indicam que a história não foi gerada (já que ela foi gerada)
+            issues = [
+                issue for issue in issues 
+                if not any(phrase in issue.lower() for phrase in [
+                    "história não foi gerada",
+                    "história não foi gerada pelo modelo",
+                    "erro: história não foi gerada"
+                ])
+            ]
+            # Se passou nas validações, remover issues de validação também
+            if final_state.get("safety_ok") and final_state.get("requirements_ok"):
+                issues = [
+                    issue for issue in issues 
+                    if not any(phrase in issue.lower() for phrase in [
+                        "problema de segurança",
+                        "requisitos não atendidos",
+                        "história contém conteúdo impróprio",
+                        "história não atende aos requisitos"
+                    ])
+                ]
 
         # Salvar história no banco de dado
         if story_markdown and getattr(request, "creator_id", None):
@@ -86,10 +141,19 @@ async def generate_story(request: StoryGenerationRequest):
                 logger.exception(f"Falha ao salvar história no banco: {e}")
                 issues.append(f"Falha ao salvar história no banco: {str(e)}")
 
-        return StoryGenerationResponse(
+        logger.info("=" * 60)
+        logger.info("📤 [RESPOSTA] Preparando resposta para o cliente")
+        logger.info(f"   História gerada: {bool(story_markdown)}, Tamanho: {len(story_markdown) if story_markdown else 0} caracteres")
+        logger.info(f"   Issues: {len(issues)}")
+        logger.info("=" * 60)
+        
+        response = StoryGenerationResponse(
             story_markdown=story_markdown,
             issues=issues
         )
+        
+        logger.info("✅ [RESPOSTA] Resposta criada e sendo retornada")
+        return response
         
     except Exception as e:
         logger.exception(f"Erro ao gerar história: {str(e)}")
