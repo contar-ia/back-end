@@ -19,4 +19,4 @@ COPY . .
 
 EXPOSE 8000
 
-CMD ["fastapi", "dev", "./src/main.py", "--host", "0.0.0.0"]
+CMD ["uvicorn", "main:app", "--app-dir", "/app/src", "--host", "0.0.0.0", "--port", "8000", "--reload", "--no-access-log"]

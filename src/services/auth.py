@@ -23,7 +23,7 @@ async def register_user(username: str, email: str, password: str):
     await db_manager.execute(query, username, email, encrypted_password)
 
 async def login_user(email: str, password: str):
-    query = "SELECT * FROM users WHERE email = $1"
+    query = "SELECT * FROM users WHERE email = $1 OR username = $1"
     user_record = await db_manager.fetchrow(query, email)
 
     if not user_record:
@@ -73,3 +73,28 @@ async def create_session(user_id: str):
     """
     row = await db_manager.fetchrow(query, user_id, expiration)
     return row['session_token']
+
+async def get_user_by_session_token(token: str):
+    if not token:
+        return None
+
+    query = """
+        SELECT u.id, u.username, u.email, s.expires_at
+        FROM sessions s
+        JOIN users u ON u.id = s.user_id
+        WHERE s.session_token = $1
+        LIMIT 1
+    """
+    row = await db_manager.fetchrow(query, token)
+    if not row:
+        return None
+
+    if row["expires_at"] and row["expires_at"] < datetime.now(timezone.utc):
+        return None
+
+    return {
+        "user_id": row["id"],
+        "username": row["username"],
+        "email": row["email"],
+    }
+

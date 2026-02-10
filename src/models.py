@@ -1,5 +1,6 @@
 from pydantic import BaseModel, Field
 from typing import List, Optional, Union
+from datetime import datetime
 
 class PromptRequest(BaseModel):
     prompt: str
@@ -25,4 +26,32 @@ class StoryGenerationRequest(BaseModel):
 class StoryGenerationResponse(BaseModel):
     story_markdown: Optional[str] = None
     issues: List[str] = Field(default_factory=list)
+    story_id: Optional[str] = None
+
+class StorySaveRequest(BaseModel):
+    creator_id: str
+    title: str
+    contents: str
+
+
+class StoryListItem(BaseModel):
+    id: str
+    creator_id: str
+    title: str
+    contents: str
+    created_at: datetime
+
+
+class StoryDetailResponse(BaseModel):
+    id: str
+    creator_id: str
+    title: str
+    contents: str
+    created_at: datetime
+
+
+class StoryStatsResponse(BaseModel):
+    created_count: int
+    reads_count: int
+    saved_count: int
     

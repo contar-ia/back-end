@@ -22,3 +22,21 @@ CREATE TABLE IF NOT EXISTS sessions (
     expires_at    TIMESTAMPTZ NOT NULL,
     created_at    TIMESTAMPTZ DEFAULT now()
 );
+
+-- Tabela de leituras de histórias
+CREATE TABLE IF NOT EXISTS story_reads (
+    id         UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    user_id    UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    story_id   UUID NOT NULL REFERENCES stories(id) ON DELETE CASCADE,
+    read_at    TIMESTAMPTZ DEFAULT now(),
+    UNIQUE (user_id, story_id)
+);
+
+-- Tabela de histórias salvas
+CREATE TABLE IF NOT EXISTS story_saves (
+    id         UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    user_id    UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    story_id   UUID NOT NULL REFERENCES stories(id) ON DELETE CASCADE,
+    saved_at   TIMESTAMPTZ DEFAULT now(),
+    UNIQUE (user_id, story_id)
+);
