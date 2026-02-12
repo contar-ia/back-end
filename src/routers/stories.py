@@ -10,6 +10,7 @@ from models import (
     StoryDetailResponse,
     StoryStatsResponse,
     StorySaveRequest,
+    StoryUpdateRequest,
 )
 from database import db_manager
 from story_graph import story_graph
@@ -347,6 +348,72 @@ async def unsave_story(story_id: str, user_id: Optional[str] = None):
     except Exception as e:
         logger.exception(f"Erro ao remover historia salva: {e}")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Erro ao remover historia salva")
+
+
+@stories_router.put("/{story_id}")
+async def update_story(story_id: str, request: StoryUpdateRequest, user_id: Optional[str] = None):
+    if not story_id or not user_id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="story_id and user_id are required")
+    if request.title is None and request.contents is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="title or contents is required")
+
+    try:
+        current_story = await db_manager.fetchrow(
+            "SELECT creator_id, title, contents FROM stories WHERE id = $1",
+            story_id,
+        )
+        if not current_story:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Historia nao encontrada")
+
+        creator_id = str(current_story["creator_id"])
+        if creator_id != str(user_id):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Somente o criador pode editar a historia")
+
+        new_title = request.title if request.title is not None else current_story["title"]
+        new_contents = request.contents if request.contents is not None else current_story["contents"]
+
+        await db_manager.execute(
+            "UPDATE stories SET title = $1, contents = $2 WHERE id = $3",
+            new_title,
+            new_contents,
+            story_id,
+        )
+
+        return {"status": "updated"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"Erro ao editar historia: {e}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Erro ao editar historia")
+
+
+@stories_router.delete("/{story_id}")
+async def delete_story(story_id: str, user_id: Optional[str] = None):
+    if not story_id or not user_id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="story_id and user_id are required")
+
+    try:
+        owner_query = "SELECT creator_id FROM stories WHERE id = $1"
+        owner_row = await db_manager.fetchrow(owner_query, story_id)
+
+        if not owner_row:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Historia nao encontrada")
+
+        creator_id = str(owner_row["creator_id"])
+
+        if creator_id == str(user_id):
+            delete_story_query = "DELETE FROM stories WHERE id = $1 AND creator_id = $2"
+            await db_manager.execute(delete_story_query, story_id, user_id)
+            return {"status": "deleted"}
+
+        delete_save_query = "DELETE FROM story_saves WHERE user_id = $1 AND story_id = $2"
+        await db_manager.execute(delete_save_query, user_id, story_id)
+        return {"status": "unsaved"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"Erro ao excluir historia: {e}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Erro ao excluir historia")
 
 
 

@@ -14,6 +14,12 @@ class LoginRequest(BaseModel):
     email: str
     password: str
 
+class UpdateProfileRequest(BaseModel):
+    username: str
+    email: str
+    institution: Optional[str] = None
+    bio: Optional[str] = None
+
 class StoryGenerationRequest(BaseModel):
     theme: str
     age_group: str
@@ -32,6 +38,10 @@ class StorySaveRequest(BaseModel):
     creator_id: str
     title: str
     contents: str
+
+class StoryUpdateRequest(BaseModel):
+    title: Optional[str] = None
+    contents: Optional[str] = None
 
 
 class StoryListItem(BaseModel):
@@ -54,4 +64,3 @@ class StoryStatsResponse(BaseModel):
     created_count: int
     reads_count: int
     saved_count: int
-    
