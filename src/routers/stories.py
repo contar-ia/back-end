@@ -1,7 +1,17 @@
-"""Router para endpoints de geração de histórias."""
+"""Router para endpoints de geracao de historias."""
 import logging
-from fastapi import APIRouter, HTTPException, status
-from models import StoryGenerationRequest, StoryGenerationResponse
+import services
+from typing import List, Optional
+from fastapi import APIRouter, HTTPException, Header, status
+from models import (
+    StoryGenerationRequest,
+    StoryGenerationResponse,
+    StoryListItem,
+    StoryDetailResponse,
+    StoryStatsResponse,
+    StorySaveRequest,
+    StoryUpdateRequest,
+)
 from database import db_manager
 from story_graph import story_graph
 from story_state import StoryState
@@ -14,14 +24,14 @@ stories_router = APIRouter()
 @stories_router.post("/generate", response_model=StoryGenerationResponse)
 async def generate_story(request: StoryGenerationRequest):
     """
-    Endpoint para gerar histórias infantis usando o pipeline LangGraph.
+    Endpoint para gerar historias infantis usando o pipeline LangGraph.
     
     Recebe StoryGenerationRequest e retorna StoryGenerationResponse.
     """
     try:
-        # VALIDAÇÃO PRÉVIA: Verificar se o input contém conteúdo sensível/impróprio usando LLM
+        # VALIDAff'O PRfVIA: Verificar se o input contem conteudo sensivel/improprio usando LLM
         logger.info("=" * 60)
-        logger.info("🔍 [VALIDAÇÃO INPUT] Verificando conteúdo do input com LLM...")
+        logger.info("Y [VALIDAff'O INPUT] Verificando conteudo do input com LLM...")
         
         is_safe, input_issues = await validate_input_safety(
             theme=request.theme,
@@ -33,18 +43,18 @@ async def generate_story(request: StoryGenerationRequest):
         
         if not is_safe:
             logger.warning("=" * 60)
-            logger.warning("❌ [VALIDAÇÃO INPUT] Input rejeitado - conteúdo sensível detectado")
+            logger.warning("[VALIDACAO INPUT] Input rejeitado - conteudo sensivel detectado")
             logger.warning("=" * 60)
             
-            # Retornar erro HTTP 400 com mensagem genérica (sem especificar o problema)
-            error_message = "As informações fornecidas contêm conteúdo sensível ou impróprio para histórias infantis. Por favor, revise o tema, personagens, cenário e valores educativos."
+            # Retornar erro HTTP 400 com mensagem generica (sem especificar o problema)
+            error_message = "As informacoes fornecidas contem conteudo sensivel ou improprio para historias infantis. Por favor, revise o tema, personagens, cenario e valores educativos."
             
             return StoryGenerationResponse(
                 story_markdown=None,
                 issues=[error_message]
             )
         
-        logger.info("✅ [VALIDAÇÃO INPUT] Input aprovado - prosseguindo com geração")
+        logger.info("[VALIDACAO INPUT] Input aprovado - prosseguindo com geracao")
         logger.info("=" * 60)
         
         # Inicializar estado do grafo
@@ -56,14 +66,14 @@ async def generate_story(request: StoryGenerationRequest):
             "final_story": None,
             "issues": [],
             "retry_count": 0,
-            "max_retries": 1,  # Máximo de 1 tentativa de regeneração (para não demorar muito)
+            "max_retries": 1,  # Maximo de 1 tentativa de regeneracao (para nao demorar muito)
             "feedback": None
         }
         
         logger.info("=" * 60)
-        logger.info("🚀 [PIPELINE] Iniciando geração de história")
+        logger.info("Ys, [PIPELINE] Iniciando geracao de historia")
         logger.info(f"   Tema: {request.theme}")
-        logger.info(f"   Faixa etária: {request.age_group}")
+        logger.info(f"   Faixa etaria: {request.age_group}")
         logger.info(f"   Personagens: {', '.join(request.characters)}")
         logger.info("=" * 60)
         
@@ -71,11 +81,11 @@ async def generate_story(request: StoryGenerationRequest):
         final_state = await story_graph.ainvoke(initial_state)
         
         logger.info("=" * 60)
-        logger.info("📊 [PIPELINE] Resumo da execução:")
-        logger.info(f"   ✅ Agente 1 (Gerador): {'OK' if final_state.get('draft_story') else 'FALHOU'}")
-        logger.info(f"   {'✅' if final_state.get('safety_ok') else '❌'} Agente 2 (Segurança): safety_ok={final_state.get('safety_ok')}")
-        logger.info(f"   {'✅' if final_state.get('requirements_ok') else '❌'} Agente 3 (Requisitos): requirements_ok={final_state.get('requirements_ok')}")
-        logger.info(f"   {'✅' if final_state.get('final_story') else '⏭️'} Agente 4 (Revisor): {'Executado' if final_state.get('final_story') else 'Não executado (validações falharam)'}")
+        logger.info("YoS [PIPELINE] Resumo da execucao:")
+        logger.info(f"   Agente 1 (Gerador): {'OK' if final_state.get('draft_story') else 'FALHOU'}")
+        logger.info(f"   Agente 2 (Seguranca): safety_ok={final_state.get('safety_ok')}")
+        logger.info(f"   Agente 3 (Requisitos): requirements_ok={final_state.get('requirements_ok')}")
+        logger.info(f"   Agente 4 (Revisor): {'Executado' if final_state.get('final_story') else 'Nao executado (validacoes falharam)'}")
         logger.info(f"   Issues encontrados: {len(final_state.get('issues', []))}")
         if final_state.get('issues'):
             for issue in final_state.get('issues', []):
@@ -87,78 +97,326 @@ async def generate_story(request: StoryGenerationRequest):
         issues = final_state.get("issues", [])
         draft_story = final_state.get("draft_story")
         
-        # Se não há história final, tentar usar draft_story
+        # Se nao ha historia final, tentar usar draft_story
         if not story_markdown:
             if draft_story and len(draft_story.strip()) > 0:
-                # Se passou nas validações mas não teve revisão final, usar draft
+                # Se passou nas validacoes mas nao teve revisao final, usar draft
                 if final_state.get("safety_ok") and final_state.get("requirements_ok"):
-                    logger.info("Usando draft_story pois passou nas validações mas não teve revisão final")
+                    logger.info("Usando draft_story pois passou nas validacoes mas nao teve revisao final")
                     story_markdown = draft_story
-                # Se não passou nas validações mas tem draft, ainda retornar (com issues)
+                # Se nao passou nas validacoes mas tem draft, ainda retornar (com issues)
                 else:
-                    logger.warning(f"Usando draft_story mesmo com validações falhadas. safety_ok={final_state.get('safety_ok')}, requirements_ok={final_state.get('requirements_ok')}")
+                    logger.warning(f"Usando draft_story mesmo com validacoes falhadas. safety_ok={final_state.get('safety_ok')}, requirements_ok={final_state.get('requirements_ok')}")
                     story_markdown = draft_story
         
-        # Se ainda não tem história, adicionar issue genérico
+        # Se ainda nao tem historia, adicionar issue generico
         if not story_markdown or len(story_markdown.strip()) == 0:
             if not issues:
-                issues.append("Não foi possível gerar a história. Verifique os logs do servidor.")
-            logger.error(f"História não gerada ou vazia. Issues: {issues}, draft_story existe: {bool(draft_story)}")
+                issues.append("Nao foi possivel gerar a historia. Verifique os logs do servidor.")
+            logger.error(f"Historia nao gerada ou vazia. Issues: {issues}, draft_story existe: {bool(draft_story)}")
             story_markdown = None
         
-        # Limpar issues irrelevantes se a história foi gerada com sucesso
+        # Limpar issues irrelevantes se a historia foi gerada com sucesso
         if story_markdown and len(story_markdown.strip()) > 0:
-            # Remover issues que indicam que a história não foi gerada (já que ela foi gerada)
+            # Remover issues que indicam que a historia nao foi gerada (ja que ela foi gerada)
             issues = [
                 issue for issue in issues 
                 if not any(phrase in issue.lower() for phrase in [
-                    "história não foi gerada",
-                    "história não foi gerada pelo modelo",
-                    "erro: história não foi gerada"
+                    "historia nao foi gerada",
+                    "historia nao foi gerada pelo modelo",
+                    "erro: historia nao foi gerada"
                 ])
             ]
-            # Se passou nas validações, remover issues de validação também
+            # Se passou nas validacoes, remover issues de validacao tambem
             if final_state.get("safety_ok") and final_state.get("requirements_ok"):
                 issues = [
                     issue for issue in issues 
                     if not any(phrase in issue.lower() for phrase in [
-                        "problema de segurança",
-                        "requisitos não atendidos",
-                        "história contém conteúdo impróprio",
-                        "história não atende aos requisitos"
+                        "problema de seguranca",
+                        "requisitos nao atendidos",
+                        "historia contem conteudo improprio",
+                        "historia nao atende aos requisitos"
                     ])
                 ]
 
-        # Salvar história no banco de dado
-        if story_markdown and getattr(request, "creator_id", None):
-            try:
-                title_to_save = request.title or request.theme
-                insert_query = "INSERT INTO stories (creator_id, title, contents) VALUES ($1, $2, $3) RETURNING id"
-                row = await db_manager.fetchrow(insert_query, request.creator_id, title_to_save, story_markdown)
-                saved_id = row["id"] if row and "id" in row else None
-                logger.info(f"História salva no DB, id={saved_id}")
-            except Exception as e:
-                logger.exception(f"Falha ao salvar história no banco: {e}")
-                issues.append(f"Falha ao salvar história no banco: {str(e)}")
-
         logger.info("=" * 60)
-        logger.info("📤 [RESPOSTA] Preparando resposta para o cliente")
-        logger.info(f"   História gerada: {bool(story_markdown)}, Tamanho: {len(story_markdown) if story_markdown else 0} caracteres")
+        logger.info("[RESPOSTA] Preparando resposta para o cliente")
+        logger.info(f"   Historia gerada: {bool(story_markdown)}, Tamanho: {len(story_markdown) if story_markdown else 0} caracteres")
         logger.info(f"   Issues: {len(issues)}")
         logger.info("=" * 60)
         
         response = StoryGenerationResponse(
             story_markdown=story_markdown,
-            issues=issues
+            issues=issues,
+            story_id=None
         )
-        
-        logger.info("✅ [RESPOSTA] Resposta criada e sendo retornada")
+
+        logger.info("[RESPOSTA] Resposta criada e sendo retornada")
         return response
         
     except Exception as e:
-        logger.exception(f"Erro ao gerar história: {str(e)}")
+        logger.exception(f"Erro ao gerar historia: {str(e)}")
         # Em caso de erro, retornar resposta com issues
         return StoryGenerationResponse(
             story_markdown=None,
-            issues=[f"Erro ao gerar história: {str(e)}"]
+            issues=[f"Erro ao gerar historia: {str(e)}"]
         )
+
+@stories_router.get("/user/{user_id}", response_model=List[StoryListItem])
+async def list_user_stories(user_id: str):
+    if not user_id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="user_id is required")
+
+    query = """
+        SELECT id, creator_id, title, contents, created_at
+        FROM stories
+        WHERE creator_id = $1
+        ORDER BY created_at DESC
+    """
+    try:
+        rows = await db_manager.fetch(query, user_id)
+        result = []
+        for r in rows:
+            d = dict(r)
+            if "id" in d:
+                d["id"] = str(d["id"])
+            if "creator_id" in d:
+                d["creator_id"] = str(d["creator_id"])
+            result.append(d)
+        return result
+    except Exception as e:
+        logger.exception(f"Erro ao listar historias do usuario: {e}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Erro ao listar historias")
+
+
+@stories_router.get("/saved/{user_id}", response_model=List[StoryListItem])
+async def list_saved_stories(user_id: str):
+    if not user_id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="user_id is required")
+
+    query = """
+        SELECT s.id, s.creator_id, s.title, s.contents, s.created_at
+        FROM story_saves ss
+        JOIN stories s ON s.id = ss.story_id
+        WHERE ss.user_id = $1
+        ORDER BY ss.saved_at DESC
+    """
+    try:
+        rows = await db_manager.fetch(query, user_id)
+        result = []
+        for r in rows:
+            d = dict(r)
+            if "id" in d:
+                d["id"] = str(d["id"])
+            if "creator_id" in d:
+                d["creator_id"] = str(d["creator_id"])
+            result.append(d)
+        return result
+    except Exception as e:
+        logger.exception(f"Erro ao listar historias salvas: {e}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Erro ao listar historias salvas")
+
+
+@stories_router.post("/save")
+async def save_new_story(request: StorySaveRequest, authorization: Optional[str] = Header(default=None)):
+    if not request.creator_id or not request.title or not request.contents:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="creator_id, title and contents are required")
+
+    # Se houver token, validar sessao
+    if authorization and authorization.startswith("Bearer "):
+        token = authorization.removeprefix("Bearer ").strip()
+        user = await services.auth.get_user_by_session_token(token)
+        if not user:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Unauthorized")
+
+        # Forcar o creator_id a bater com o token
+        request = StorySaveRequest(
+            creator_id=str(user["user_id"]),
+            title=request.title,
+            contents=request.contents,
+        )
+
+    try:
+        # Garantir que o creator_id existe no banco
+        user_row = await db_manager.fetchrow("SELECT id FROM users WHERE id = $1", request.creator_id)
+        if not user_row:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
+
+        insert_story = "INSERT INTO stories (creator_id, title, contents) VALUES ($1, $2, $3) RETURNING id"
+        row = await db_manager.fetchrow(insert_story, request.creator_id, request.title, request.contents)
+        story_id = row["id"] if row and "id" in row else None
+
+        if story_id:
+            insert_save = """
+                INSERT INTO story_saves (user_id, story_id)
+                VALUES ($1, $2)
+                ON CONFLICT (user_id, story_id) DO NOTHING
+            """
+            await db_manager.execute(insert_save, request.creator_id, story_id)
+
+        return { "story_id": story_id }
+    except Exception as e:
+        logger.exception(f"Erro ao salvar nova historia: {e}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Erro ao salvar historia")
+
+
+@stories_router.get("/by-id/{story_id}", response_model=StoryDetailResponse)
+async def get_story(story_id: str, user_id: Optional[str] = None):
+    if not story_id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="story_id is required")
+
+    query = """
+        SELECT id, creator_id, title, contents, created_at
+        FROM stories
+        WHERE id = $1
+    """
+    row = await db_manager.fetchrow(query, story_id)
+    if not row:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Historia nao encontrada")
+
+    # Registrar leitura, se user_id for fornecido
+    if user_id:
+        try:
+            insert_read = """
+                INSERT INTO story_reads (user_id, story_id)
+                VALUES ($1, $2)
+                ON CONFLICT (user_id, story_id) DO NOTHING
+            """
+            await db_manager.execute(insert_read, user_id, story_id)
+        except Exception as e:
+            logger.warning(f"Falha ao registrar leitura: {e}")
+
+    d = dict(row)
+    if "id" in d:
+        d["id"] = str(d["id"])
+    if "creator_id" in d:
+        d["creator_id"] = str(d["creator_id"])
+    return d
+
+
+@stories_router.get("/stats/{user_id}", response_model=StoryStatsResponse)
+async def get_user_story_stats(user_id: str):
+    if not user_id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="user_id is required")
+
+    try:
+        created_query = "SELECT COUNT(*) FROM stories WHERE creator_id = $1"
+        reads_query = "SELECT COUNT(*) FROM story_reads WHERE user_id = $1"
+        saves_query = "SELECT COUNT(*) FROM story_saves WHERE user_id = $1"
+
+        created_row = await db_manager.fetchrow(created_query, user_id)
+        reads_row = await db_manager.fetchrow(reads_query, user_id)
+        saves_row = await db_manager.fetchrow(saves_query, user_id)
+
+        return StoryStatsResponse(
+            created_count=int(created_row["count"]) if created_row else 0,
+            reads_count=int(reads_row["count"]) if reads_row else 0,
+            saved_count=int(saves_row["count"]) if saves_row else 0,
+        )
+    except Exception as e:
+        logger.exception(f"Erro ao buscar estatisticas: {e}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Erro ao buscar estatisticas")
+
+
+@stories_router.post("/{story_id}/save")
+async def save_story(story_id: str, user_id: Optional[str] = None):
+    if not story_id or not user_id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="story_id and user_id are required")
+
+    try:
+        insert_save = """
+            INSERT INTO story_saves (user_id, story_id)
+            VALUES ($1, $2)
+            ON CONFLICT (user_id, story_id) DO NOTHING
+        """
+        await db_manager.execute(insert_save, user_id, story_id)
+        return { "status": "saved" }
+    except Exception as e:
+        logger.exception(f"Erro ao salvar historia: {e}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Erro ao salvar historia")
+
+
+@stories_router.post("/{story_id}/unsave")
+async def unsave_story(story_id: str, user_id: Optional[str] = None):
+    if not story_id or not user_id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="story_id and user_id are required")
+
+    try:
+        delete_save = "DELETE FROM story_saves WHERE user_id = $1 AND story_id = $2"
+        await db_manager.execute(delete_save, user_id, story_id)
+        return { "status": "unsaved" }
+    except Exception as e:
+        logger.exception(f"Erro ao remover historia salva: {e}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Erro ao remover historia salva")
+
+
+@stories_router.put("/{story_id}")
+async def update_story(story_id: str, request: StoryUpdateRequest, user_id: Optional[str] = None):
+    if not story_id or not user_id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="story_id and user_id are required")
+    if request.title is None and request.contents is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="title or contents is required")
+
+    try:
+        current_story = await db_manager.fetchrow(
+            "SELECT creator_id, title, contents FROM stories WHERE id = $1",
+            story_id,
+        )
+        if not current_story:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Historia nao encontrada")
+
+        creator_id = str(current_story["creator_id"])
+        if creator_id != str(user_id):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Somente o criador pode editar a historia")
+
+        new_title = request.title if request.title is not None else current_story["title"]
+        new_contents = request.contents if request.contents is not None else current_story["contents"]
+
+        await db_manager.execute(
+            "UPDATE stories SET title = $1, contents = $2 WHERE id = $3",
+            new_title,
+            new_contents,
+            story_id,
+        )
+
+        return {"status": "updated"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"Erro ao editar historia: {e}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Erro ao editar historia")
+
+
+@stories_router.delete("/{story_id}")
+async def delete_story(story_id: str, user_id: Optional[str] = None):
+    if not story_id or not user_id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="story_id and user_id are required")
+
+    try:
+        owner_query = "SELECT creator_id FROM stories WHERE id = $1"
+        owner_row = await db_manager.fetchrow(owner_query, story_id)
+
+        if not owner_row:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Historia nao encontrada")
+
+        creator_id = str(owner_row["creator_id"])
+
+        if creator_id == str(user_id):
+            delete_story_query = "DELETE FROM stories WHERE id = $1 AND creator_id = $2"
+            await db_manager.execute(delete_story_query, story_id, user_id)
+            return {"status": "deleted"}
+
+        delete_save_query = "DELETE FROM story_saves WHERE user_id = $1 AND story_id = $2"
+        await db_manager.execute(delete_save_query, user_id, story_id)
+        return {"status": "unsaved"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"Erro ao excluir historia: {e}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Erro ao excluir historia")
+
+
+
+
+
+
