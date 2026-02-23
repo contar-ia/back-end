@@ -1,7 +1,7 @@
 """Validador de input para detectar conteúdo sensível/impróprio antes de gerar histórias."""
 import logging
 from typing import List, Tuple
-from services.agents import send_prompt
+from app.services.agents import send_prompt
 
 logger = logging.getLogger(__name__)
 

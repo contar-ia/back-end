@@ -1,5 +1,5 @@
 from typing import TypedDict, List, Optional
-from models import StoryGenerationRequest
+from app.models.models import StoryGenerationRequest
 
 
 class StoryState(TypedDict):

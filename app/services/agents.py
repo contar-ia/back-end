@@ -1,5 +1,5 @@
 import httpx
-import constants as const
+import app.core.constants as const
 
 async def send_prompt(prompt: str, timeout: int = 60):
     """

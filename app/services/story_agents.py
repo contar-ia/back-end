@@ -1,7 +1,7 @@
 """Agentes do pipeline LangGraph para geração e validação de histórias infantis."""
 import logging
-import services
-from story_state import StoryState
+from app import services
+from app.models.story_state import StoryState
 
 logger = logging.getLogger(__name__)
 

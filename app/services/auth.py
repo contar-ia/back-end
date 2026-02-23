@@ -1,6 +1,6 @@
-from database import db_manager
+from app.database.database import db_manager
 from fastapi import HTTPException, status
-from models import UpdateProfileRequest
+from app.models.models import UpdateProfileRequest
 import bcrypt
 from datetime import datetime, timedelta, timezone
 

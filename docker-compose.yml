@@ -22,7 +22,7 @@ services:
 
   contaria_db:
     build:
-      context: ./database
+      context: ./app/database
       dockerfile: Dockerfile
     container_name: contaria_db
     restart: unless-stopped
