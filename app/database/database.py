@@ -1,6 +1,6 @@
 import asyncpg
 import logging
-import constants as const
+import app.core.constants as const
 
 logger = logging.getLogger(__name__)
 

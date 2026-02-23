@@ -1,8 +1,8 @@
 """Grafo LangGraph para pipeline de geração e validação de histórias infantis."""
 import logging
 from langgraph.graph import StateGraph, END
-from story_state import StoryState
-from story_agents import (
+from app.models.story_state import StoryState
+from app.services.story_agents import (
     generate_story,
     regenerate_story,
     validate_safety,

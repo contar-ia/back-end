@@ -1,9 +1,9 @@
 """Router para endpoints de geracao de historias."""
 import logging
-import services
+from app.services import auth
 from typing import List, Optional
 from fastapi import APIRouter, HTTPException, Header, status
-from models import (
+from app.models.models import (
     StoryGenerationRequest,
     StoryGenerationResponse,
     StoryListItem,
@@ -12,10 +12,10 @@ from models import (
     StorySaveRequest,
     StoryUpdateRequest,
 )
-from database import db_manager
-from story_graph import story_graph
-from story_state import StoryState
-from input_validator import validate_input_safety
+from app.database.database import db_manager
+from app.services.story_graph import story_graph
+from app.models.story_state import StoryState
+from app.core.input_validator import validate_input_safety
 
 logger = logging.getLogger(__name__)
 stories_router = APIRouter()

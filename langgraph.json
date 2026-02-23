@@ -1,6 +1,6 @@
 {
   "graphs": {
-    "story_pipeline": "./src/langgraph_entry.py:graph"
+    "story_pipeline": "./app/services/langgraph_entry.py:graph"
   },
   "dependencies": [
     "./requirements.txt"

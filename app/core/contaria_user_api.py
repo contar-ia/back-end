@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 
-class ContAI_UserAPI(ABC):
+class Contar_IA_UserAPI(ABC):
 
     @abstractmethod
     def register_user(self, email, username, password):
