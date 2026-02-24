@@ -1,4 +1,17 @@
-"""Router para endpoints de geracao de historias."""
+"""
+Router para endpoints de geração e gerenciamento de histórias infantis.
+
+Este módulo define os endpoints responsáveis por todo o ciclo de vida
+das histórias na aplicação, incluindo:
+
+• Geração automática de histórias usando um pipeline baseado em agentes (LangGraph)
+• Validação de segurança do conteúdo de entrada
+• Persistência de histórias no banco de dados
+• Listagem de histórias criadas e salvas
+• Recuperação detalhada de histórias
+• Estatísticas de uso do usuário
+• Operações de salvar, remover, editar e excluir histórias
+"""
 import logging
 from app.services import auth
 from typing import List, Optional
@@ -17,19 +30,49 @@ from app.services.story_graph import story_graph
 from app.models.story_state import StoryState
 from app.core.input_validator import validate_input_safety
 
+# Configuração do logger do módulo
 logger = logging.getLogger(__name__)
-stories_router = APIRouter()
 
+# Instância do roteador responsável pelos endpoints de histórias
+stories_router = APIRouter()
 
 @stories_router.post("/generate", response_model=StoryGenerationResponse)
 async def generate_story(request: StoryGenerationRequest):
     """
-    Endpoint para gerar historias infantis usando o pipeline LangGraph.
-    
-    Recebe StoryGenerationRequest e retorna StoryGenerationResponse.
+    Gera uma história infantil automaticamente usando um pipeline baseado em agentes.
+
+    Fluxo de execução:
+
+    1. Validação de segurança do input usando LLM
+    2. Inicialização do estado do grafo de geração
+    3. Execução do pipeline LangGraph (múltiplos agentes)
+    4. Processamento do resultado
+    5. Retorno da história gerada ou issues encontrados
+
+    Agentes envolvidos no pipeline:
+
+    - Gerador: cria o rascunho da história
+    - Validador de segurança: verifica conteúdo impróprio
+    - Validador de requisitos: garante adequação ao público-alvo
+    - Revisor: produz a versão final da história
+
+    Parâmetros:
+        request (StoryGenerationRequest): Dados para geração da história,
+        como tema, faixa etária, personagens, cenário e valores educativos.
+
+    Retorno:
+        StoryGenerationResponse contendo:
+        - story_markdown: história gerada (ou None em caso de falha)
+        - issues: lista de problemas encontrados durante o processo
+        - story_id: identificador (se aplicável)
+
+    Observações:
+        - Caso o input seja considerado impróprio, a geração não é executada.
+        - O sistema pode retornar um rascunho caso a revisão final falhe.
+        - O endpoint nunca expõe detalhes sensíveis da validação.
     """
     try:
-        # VALIDAff'O PRfVIA: Verificar se o input contem conteudo sensivel/improprio usando LLM
+        # VALIDAff'O PRfVIA: Verificar se o input contém conteúdo sensível/impróprio usando LLM
         logger.info("=" * 60)
         logger.info("Y [VALIDAff'O INPUT] Verificando conteudo do input com LLM...")
         
@@ -57,7 +100,7 @@ async def generate_story(request: StoryGenerationRequest):
         logger.info("[VALIDACAO INPUT] Input aprovado - prosseguindo com geracao")
         logger.info("=" * 60)
         
-        # Inicializar estado do grafo
+        # Inicialização do estado do pipeline
         initial_state: StoryState = {
             "input": request,
             "draft_story": None,
@@ -77,7 +120,7 @@ async def generate_story(request: StoryGenerationRequest):
         logger.info(f"   Personagens: {', '.join(request.characters)}")
         logger.info("=" * 60)
         
-        # Executar o grafo
+        # Execução do pipeline de geração
         final_state = await story_graph.ainvoke(initial_state)
         
         logger.info("=" * 60)
@@ -92,7 +135,7 @@ async def generate_story(request: StoryGenerationRequest):
                 logger.warning(f"      - {issue}")
         logger.info("=" * 60)
         
-        # Preparar resposta
+        # Preparação da resposta
         story_markdown = final_state.get("final_story")
         issues = final_state.get("issues", [])
         draft_story = final_state.get("draft_story")
@@ -164,6 +207,19 @@ async def generate_story(request: StoryGenerationRequest):
 
 @stories_router.get("/user/{user_id}", response_model=List[StoryListItem])
 async def list_user_stories(user_id: str):
+    """
+    Lista todas as histórias criadas por um usuário específico.
+
+    Parâmetros:
+        user_id (str): Identificador do usuário criador.
+
+    Retorno:
+        Lista de StoryListItem ordenada pela data de criação (mais recentes primeiro).
+
+    Exceções:
+        400 — user_id não fornecido
+        500 — erro ao acessar o banco de dados
+    """
     if not user_id:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="user_id is required")
 
@@ -188,9 +244,17 @@ async def list_user_stories(user_id: str):
         logger.exception(f"Erro ao listar historias do usuario: {e}")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Erro ao listar historias")
 
-
 @stories_router.get("/saved/{user_id}", response_model=List[StoryListItem])
 async def list_saved_stories(user_id: str):
+    """
+    Lista as histórias que um usuário salvou.
+
+    Parâmetros:
+        user_id (str): Identificador do usuário.
+
+    Retorno:
+        Lista de histórias salvas ordenadas pela data de salvamento.
+    """
     if not user_id:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="user_id is required")
 
@@ -216,9 +280,21 @@ async def list_saved_stories(user_id: str):
         logger.exception(f"Erro ao listar historias salvas: {e}")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Erro ao listar historias salvas")
 
-
 @stories_router.post("/save")
 async def save_new_story(request: StorySaveRequest, authorization: Optional[str] = Header(default=None)):
+    """
+    Salva uma nova história criada pelo usuário.
+
+    Caso um token Bearer seja fornecido, a sessão é validada e o creator_id
+    é ajustado para corresponder ao usuário autenticado.
+
+    Parâmetros:
+        request (StorySaveRequest): Dados da história a ser salva.
+        authorization (str | None): Header Authorization opcional.
+
+    Retorno:
+        dict contendo o ID da história criada.
+    """
     if not request.creator_id or not request.title or not request.contents:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="creator_id, title and contents are required")
 
@@ -259,9 +335,20 @@ async def save_new_story(request: StorySaveRequest, authorization: Optional[str]
         logger.exception(f"Erro ao salvar nova historia: {e}")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Erro ao salvar historia")
 
-
 @stories_router.get("/by-id/{story_id}", response_model=StoryDetailResponse)
 async def get_story(story_id: str, user_id: Optional[str] = None):
+    """
+    Recupera os detalhes completos de uma história.
+
+    Opcionalmente registra a leitura da história pelo usuário.
+
+    Parâmetros:
+        story_id (str): Identificador da história.
+        user_id (str | None): Identificador do usuário que está lendo.
+
+    Retorno:
+        StoryDetailResponse com dados completos da história.
+    """
     if not story_id:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="story_id is required")
 
@@ -293,9 +380,23 @@ async def get_story(story_id: str, user_id: Optional[str] = None):
         d["creator_id"] = str(d["creator_id"])
     return d
 
-
 @stories_router.get("/stats/{user_id}", response_model=StoryStatsResponse)
 async def get_user_story_stats(user_id: str):
+    """
+    Retorna estatísticas de uso de histórias para um usuário.
+
+    Métricas incluídas:
+
+    - Quantidade de histórias criadas
+    - Quantidade de leituras realizadas
+    - Quantidade de histórias salvas
+
+    Parâmetros:
+        user_id (str): Identificador do usuário.
+
+    Retorno:
+        StoryStatsResponse com contadores agregados.
+    """
     if not user_id:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="user_id is required")
 
@@ -317,9 +418,11 @@ async def get_user_story_stats(user_id: str):
         logger.exception(f"Erro ao buscar estatisticas: {e}")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Erro ao buscar estatisticas")
 
-
 @stories_router.post("/{story_id}/save")
 async def save_story(story_id: str, user_id: Optional[str] = None):
+    """
+    Marca uma história existente como salva para um usuário.
+    """
     if not story_id or not user_id:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="story_id and user_id are required")
 
@@ -335,9 +438,11 @@ async def save_story(story_id: str, user_id: Optional[str] = None):
         logger.exception(f"Erro ao salvar historia: {e}")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Erro ao salvar historia")
 
-
 @stories_router.post("/{story_id}/unsave")
 async def unsave_story(story_id: str, user_id: Optional[str] = None):
+    """
+    Remove o marcador de história salva para um usuário.
+    """
     if not story_id or not user_id:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="story_id and user_id are required")
 
@@ -349,9 +454,13 @@ async def unsave_story(story_id: str, user_id: Optional[str] = None):
         logger.exception(f"Erro ao remover historia salva: {e}")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Erro ao remover historia salva")
 
-
 @stories_router.put("/{story_id}")
 async def update_story(story_id: str, request: StoryUpdateRequest, user_id: Optional[str] = None):
+    """
+    Atualiza o título e/ou conteúdo de uma história existente.
+
+    Apenas o criador da história pode realizar alterações.
+    """
     if not story_id or not user_id:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="story_id and user_id are required")
     if request.title is None and request.contents is None:
@@ -386,9 +495,16 @@ async def update_story(story_id: str, request: StoryUpdateRequest, user_id: Opti
         logger.exception(f"Erro ao editar historia: {e}")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Erro ao editar historia")
 
-
 @stories_router.delete("/{story_id}")
 async def delete_story(story_id: str, user_id: Optional[str] = None):
+    """
+    Exclui uma história ou remove-a da lista de salvos do usuário.
+
+    Comportamento:
+
+    - Se o usuário for o criador → a história é excluída permanentemente
+    - Caso contrário → apenas remove dos salvos do usuário
+    """
     if not story_id or not user_id:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="story_id and user_id are required")
 
@@ -414,9 +530,3 @@ async def delete_story(story_id: str, user_id: Optional[str] = None):
     except Exception as e:
         logger.exception(f"Erro ao excluir historia: {e}")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Erro ao excluir historia")
-
-
-
-
-
-
