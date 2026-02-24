@@ -1,10 +1,23 @@
-"""Validador de input para detectar conteúdo sensível/impróprio antes de gerar histórias."""
+"""
+Validador de input para detectar conteúdo sensível/impróprio antes de gerar histórias.
+
+Este módulo implementa um mecanismo de validação inteligente baseado em LLM
+(Modelo de Linguagem) para garantir que os parâmetros fornecidos para geração
+de histórias infantis sejam apropriados para crianças.
+
+A validação ocorre em múltiplas etapas:
+
+1. Verificação rápida por termos explicitamente impróprios (bloqueio imediato)
+2. Análise contextual via LLM (mais sofisticada)
+3. Tratamento de falsos positivos do modelo
+4. Estratégia conservadora em caso de dúvida ou erro
+"""
 import logging
 from typing import List, Tuple
 from app.services.agents import send_prompt
 
+# Logger específico do módulo
 logger = logging.getLogger(__name__)
-
 
 async def validate_input_safety(
     theme: str,
@@ -14,15 +27,55 @@ async def validate_input_safety(
     characters: List[str]
 ) -> Tuple[bool, List[str]]:
     """
-    Valida se o input contém conteúdo sensível/impróprio usando LLM.
-    
-    Usa um agente LLM para analisar o contexto e detectar conteúdo impróprio
-    de forma mais inteligente do que uma lista fixa de termos.
-    
-    Returns:
-        Tuple[bool, List[str]]: (is_safe, issues)
-        - is_safe: True se o input é seguro, False se contém conteúdo impróprio
-        - issues: Lista de problemas encontrados
+    Valida se o input contém conteúdo sensível ou impróprio para histórias infantis.
+
+    Esta função utiliza um modelo de linguagem (LLM) para analisar o contexto
+    completo do input, permitindo uma detecção mais precisa do que simples
+    filtros baseados em palavras-chave.
+
+    Fluxo de validação:
+
+    1) Verificação rápida por termos explicitamente impróprios
+       — evita chamadas desnecessárias ao LLM
+
+    2) Análise contextual via LLM
+       — avalia significado e intenção do conteúdo
+
+    3) Tratamento de respostas ambíguas ou erros do modelo
+
+    4) Política conservadora
+       — em caso de dúvida, o conteúdo é rejeitado por segurança
+
+    Parâmetros:
+        theme (str):
+            Tema principal da história.
+
+        age_group (str):
+            Faixa etária alvo da história.
+
+        educational_value (str):
+            Valor educativo pretendido (ex.: amizade, respeito).
+
+        setting (str):
+            Cenário onde a história ocorre.
+
+        characters (List[str]):
+            Lista de personagens da história.
+
+    Retorno:
+        Tuple[bool, List[str]]:
+            - is_safe (bool):
+                True se o conteúdo é apropriado.
+                False se contém material sensível/impróprio.
+
+            - issues (List[str]):
+                Lista de problemas encontrados ou mensagens explicativas.
+                Vazia se o conteúdo for aprovado.
+
+    Observações importantes:
+        - O sistema prioriza aprovação quando não há evidência clara de problema.
+        - Falsos positivos do LLM são tratados para evitar bloqueios indevidos.
+        - Em caso de falha técnica, o conteúdo é rejeitado por segurança.
     """
     logger.info("🔍 [VALIDAÇÃO INPUT] Analisando input com LLM...")
     logger.info(f"   Tema: {theme}")
