@@ -1,11 +1,59 @@
+"""
+Módulo de serviços de autenticação e gerenciamento de usuários.
+
+Este módulo implementa a camada de serviço responsável por operações
+relacionadas a usuários dentro da aplicação FastAPI, incluindo:
+
+Funcionalidades principais:
+- Registro de novos usuários
+- Autenticação por email ou username
+- Criptografia e verificação de senhas com bcrypt
+- Criação e validação de sessões persistentes
+- Recuperação de usuário autenticado via token
+- Atualização de perfil do usuário
+
+Características de segurança:
+- Senhas nunca são armazenadas em texto puro
+- Uso de hashing forte com salt (bcrypt)
+- Verificação de conflitos de username e email
+- Tokens de sessão com expiração automática
+- Proteção contra ambiguidade de identificadores no login
+
+Dependências:
+- db_manager: Gerenciador de acesso assíncrono ao banco de dados
+- FastAPI HTTPException: Tratamento padronizado de erros HTTP
+- bcrypt: Hash seguro de senhas
+- datetime: Controle de expiração de sessões
+"""
 from app.database.database import db_manager
 from fastapi import HTTPException, status
 from app.models.models import UpdateProfileRequest
 import bcrypt
 from datetime import datetime, timedelta, timezone
 
-
 async def register_user(username: str, email: str, password: str):
+    """
+    Registra um novo usuário no sistema.
+
+    Este método:
+    1. Normaliza username e email (remove espaços e coloca email em lowercase).
+    2. Verifica se já existe usuário com mesmo username ou email.
+    3. Criptografa a senha usando bcrypt.
+    4. Insere o novo usuário na tabela `users`.
+
+    Args:
+        username (str): Nome de usuário escolhido.
+        email (str): Email do usuário.
+        password (str): Senha em texto puro.
+
+    Raises:
+        HTTPException (409 CONFLICT):
+            - Se o username já estiver em uso.
+            - Se o email já estiver registrado.
+
+    Returns:
+        None
+    """
     username = username.strip()
     email = email.strip().lower()
 
@@ -33,8 +81,38 @@ async def register_user(username: str, email: str, password: str):
     query = "INSERT INTO users (username, email, pw_hash) VALUES ($1, $2, $3)"
     await db_manager.execute(query, username, email, encrypted_password)
 
-
 async def login_user(email: str, password: str):
+    """
+    Autentica um usuário usando email ou username.
+
+    Fluxo:
+    1. Normaliza o identificador.
+    2. Busca por correspondência tanto em email quanto em username.
+    3. Evita ambiguidade caso exista:
+       - Um usuário com aquele email
+       - Outro usuário com aquele mesmo valor como username
+    4. Valida a senha com bcrypt.
+    5. Cria uma sessão e retorna token de autenticação.
+
+    Args:
+        email (str): Pode ser email ou username.
+        password (str): Senha em texto puro.
+
+    Raises:
+        HTTPException:
+            401 UNAUTHORIZED → Credenciais inválidas.
+            409 CONFLICT → Identificador ambíguo.
+
+    Returns:
+        dict: Dados do usuário autenticado contendo:
+            - user_id
+            - status
+            - username
+            - email
+            - institution
+            - bio
+            - token (session_token)
+    """
     login_identifier = email.strip()
     normalized_email = login_identifier.lower()
 
@@ -80,27 +158,64 @@ async def login_user(email: str, password: str):
         "token": await create_session(user_record["id"]),
     }
 
-
 async def _encrypt_password(password: str) -> str:
+    """
+    Gera hash seguro da senha utilizando bcrypt.
+
+    Args:
+        password (str): Senha em texto puro.
+
+    Returns:
+        str: Hash da senha em formato string (UTF-8).
+    """
     pwd_bytes = password.encode("utf-8")
     salt = bcrypt.gensalt()
     hashed_password = bcrypt.hashpw(pwd_bytes, salt)
     return hashed_password.decode("utf-8")
 
-
 async def _verify_password(plain_password: str, hashed_password: str) -> bool:
+    """
+    Verifica se a senha informada corresponde ao hash armazenado.
+
+    Args:
+        plain_password (str): Senha em texto puro.
+        hashed_password (str): Hash armazenado no banco.
+
+    Returns:
+        bool: True se a senha for válida, False caso contrário.
+    """
     return bcrypt.checkpw(
         plain_password.encode("utf-8"),
         hashed_password.encode("utf-8")
     )
 
-
 async def _list_db_users():
+    """
+    Lista todos os usuários cadastrados no banco de dados.
+
+    ⚠ Método auxiliar, utilizado para debug ou administração.
+
+    Returns:
+        list: Registros completos da tabela `users`.
+    """
     found_users = await db_manager.fetch("SELECT * FROM users")
     return found_users
 
-
 async def create_session(user_id: str):
+    """
+    Cria uma nova sessão para o usuário.
+
+    A sessão:
+    - Possui validade de 7 dias.
+    - Gera automaticamente um `session_token`.
+    - É armazenada na tabela `sessions`.
+
+    Args:
+        user_id (str): ID do usuário autenticado.
+
+    Returns:
+        str: Token de sessão gerado.
+    """
     expiration = datetime.now(timezone.utc) + timedelta(days=7)
 
     query = """
@@ -111,8 +226,22 @@ async def create_session(user_id: str):
     row = await db_manager.fetchrow(query, user_id, expiration)
     return row["session_token"]
 
-
 async def _get_session_user_row(token: str):
+    """
+    Recupera os dados do usuário associados a um token de sessão válido.
+
+    Valida:
+    - Existência da sessão.
+    - Não expiração do token.
+
+    Args:
+        token (str): Session token.
+
+    Returns:
+        dict | None:
+            Dados do usuário + expires_at se válido.
+            None se inválido ou expirado.
+    """
     if not token:
         return None
 
@@ -132,8 +261,22 @@ async def _get_session_user_row(token: str):
 
     return row
 
-
 async def get_user_by_session_token(token: str):
+    """
+    Retorna dados públicos do usuário autenticado via token.
+
+    Args:
+        token (str): Token de sessão.
+
+    Returns:
+        dict | None:
+            - user_id
+            - username
+            - email
+            - institution
+            - bio
+        None se token inválido ou expirado.
+    """
     row = await _get_session_user_row(token)
     if not row:
         return None
@@ -146,8 +289,33 @@ async def get_user_by_session_token(token: str):
         "bio": row.get("bio"),
     }
 
-
 async def update_user_by_session_token(token: str, request: UpdateProfileRequest):
+    """
+    Atualiza os dados do usuário autenticado.
+
+    Regras:
+    - Token deve ser válido.
+    - Username e email não podem estar vazios.
+    - Username e email devem ser únicos no sistema.
+    - Não pode haver conflito com outro usuário.
+
+    Args:
+        token (str): Token de sessão válido.
+        request (UpdateProfileRequest): Objeto contendo:
+            - username
+            - email
+            - institution (opcional)
+            - bio (opcional)
+
+    Raises:
+        HTTPException:
+            401 UNAUTHORIZED → Token inválido.
+            400 BAD REQUEST → Campos obrigatórios vazios.
+            409 CONFLICT → Username ou email já em uso.
+
+    Returns:
+        dict: Dados atualizados do usuário.
+    """
     row = await _get_session_user_row(token)
     if not row:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Unauthorized")

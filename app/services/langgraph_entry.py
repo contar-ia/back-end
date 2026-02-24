@@ -1,6 +1,9 @@
 """
 Ponto de entrada para o LangGraph Studio.
-Exporta o grafo compilado para visualização e debug.
+
+Este módulo tem como finalidade expor o grafo compilado da aplicação
+para ferramentas externas de visualização e depuração, como o
+LangGraph Studio.
 """
 import sys
 import os
