@@ -301,7 +301,7 @@ async def save_new_story(request: StorySaveRequest, authorization: Optional[str]
     # Se houver token, validar sessao
     if authorization and authorization.startswith("Bearer "):
         token = authorization.removeprefix("Bearer ").strip()
-        user = await services.auth.get_user_by_session_token(token)
+        user = await auth.get_user_by_session_token(token)
         if not user:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Unauthorized")
 
